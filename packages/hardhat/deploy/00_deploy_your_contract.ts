@@ -2,25 +2,24 @@ import { HardhatRuntimeEnvironment } from "hardhat/types";
 import { DeployFunction } from "hardhat-deploy/types";
 import { Contract } from "ethers";
 
-const deployCrowdfund: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
+const deploySplitChain: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   const { deployer } = await hre.getNamedAccounts();
   const { deploy } = hre.deployments;
 
-  await deploy("Crowdfund", {
+  await deploy("SplitChain", {
     from: deployer,
-    // Contract constructor arguments
     args: [],
     log: true,
     autoMine: true,
   });
 
   // Get the deployed contract
-  const crowdfund = await hre.ethers.getContract<Contract>("Crowdfund", deployer);
+  const splitChain = await hre.ethers.getContract<Contract>("SplitChain", deployer);
 
   // Print the address
-  console.log("Crowdfund contract deployed at:", await crowdfund.getAddress());
+  console.log("SplitChain contract deployed at:", await splitChain.getAddress());
 };
 
-export default deployCrowdfund;
+export default deploySplitChain;
 
-deployCrowdfund.tags = ["Crowdfund"];
+deploySplitChain.tags = ["SplitChain"];
