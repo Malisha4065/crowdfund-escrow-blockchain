@@ -1,53 +1,44 @@
 "use client";
 
 import { useState } from "react";
+import { MemberSearchInput } from "./MemberSearchInput";
 import { useAccount } from "wagmi";
-import { useScaffoldWriteContract } from "~~/hooks/scaffold-eth";
+
+interface User {
+  address: string;
+  displayName: string;
+  avatarUrl?: string | null;
+}
+
+interface SelectedMember {
+  address: string;
+  displayName?: string;
+}
 
 interface CreateGroupModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSuccess?: (groupId: bigint) => void;
+  onSuccess?: (groupId: number) => void;
 }
 
 export function CreateGroupModal({ isOpen, onClose, onSuccess }: CreateGroupModalProps) {
   const { address } = useAccount();
   const [groupName, setGroupName] = useState("");
-  const [memberInput, setMemberInput] = useState("");
-  const [members, setMembers] = useState<string[]>([]);
+  const [members, setMembers] = useState<SelectedMember[]>([]);
   const [isCreating, setIsCreating] = useState(false);
   const [error, setError] = useState("");
 
-  const { writeContractAsync } = useScaffoldWriteContract({ contractName: "SplitChain" });
-
-  const isValidAddress = (addr: string) => /^0x[a-fA-F0-9]{40}$/.test(addr);
-
-  const addMember = () => {
-    const trimmed = memberInput.trim();
-    if (!trimmed) return;
-
-    if (!isValidAddress(trimmed)) {
-      setError("Invalid Ethereum address");
-      return;
-    }
-
-    if (trimmed.toLowerCase() === address?.toLowerCase()) {
-      setError("You're automatically added as a member");
-      return;
-    }
-
-    if (members.some(m => m.toLowerCase() === trimmed.toLowerCase())) {
-      setError("Member already added");
-      return;
-    }
-
-    setMembers([...members, trimmed]);
-    setMemberInput("");
+  const handleAddMember = (memberAddress: string, user?: User) => {
+    const newMember: SelectedMember = {
+      address: memberAddress,
+      displayName: user?.displayName,
+    };
+    setMembers([...members, newMember]);
     setError("");
   };
 
   const removeMember = (addr: string) => {
-    setMembers(members.filter(m => m !== addr));
+    setMembers(members.filter(m => m.address !== addr));
   };
 
   const handleCreate = async () => {
@@ -57,27 +48,50 @@ export function CreateGroupModal({ isOpen, onClose, onSuccess }: CreateGroupModa
     setError("");
 
     try {
-      await writeContractAsync({
-        functionName: "createGroup",
-        args: [groupName, members],
+      // Ensure creator has a profile
+      await fetch("/api/users", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          address,
+          displayName: `User ${address.slice(0, 6)}`,
+        }),
       });
+
+      // Create group via API
+      const res = await fetch("/api/groups", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: groupName,
+          creatorAddress: address,
+          memberAddresses: members.map(m => m.address),
+        }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || "Failed to create group");
+      }
+
+      const group = await res.json();
 
       // Reset and close
       setGroupName("");
       setMembers([]);
       onClose();
-
-      // TODO: Parse event to get group ID
-      onSuccess?.(1n); // Placeholder
-    } catch (err: any) {
+      onSuccess?.(group.id);
+    } catch (err: unknown) {
       console.error("Failed to create group:", err);
-      setError(err.message || "Failed to create group");
+      setError(err instanceof Error ? err.message : "Failed to create group");
     } finally {
       setIsCreating(false);
     }
   };
 
   if (!isOpen) return null;
+
+  const excludeAddresses = [address || "", ...members.map(m => m.address)];
 
   return (
     <div className="modal modal-open">
@@ -108,21 +122,13 @@ export function CreateGroupModal({ isOpen, onClose, onSuccess }: CreateGroupModa
         {/* Add Members */}
         <div className="form-control mt-4">
           <label className="label">
-            <span className="label-text">Add Members (wallet addresses)</span>
+            <span className="label-text">Add Members</span>
           </label>
-          <div className="flex gap-2">
-            <input
-              type="text"
-              value={memberInput}
-              onChange={e => setMemberInput(e.target.value)}
-              placeholder="0x..."
-              className="input input-bordered flex-1"
-              onKeyDown={e => e.key === "Enter" && (e.preventDefault(), addMember())}
-            />
-            <button type="button" onClick={addMember} className="btn btn-primary">
-              Add
-            </button>
-          </div>
+          <MemberSearchInput
+            onSelect={handleAddMember}
+            excludeAddresses={excludeAddresses}
+            placeholder="Search by name or paste address..."
+          />
         </div>
 
         {/* Error */}
@@ -143,9 +149,13 @@ export function CreateGroupModal({ isOpen, onClose, onSuccess }: CreateGroupModa
 
             {/* Added members */}
             {members.map(m => (
-              <span key={m} className="badge badge-outline badge-lg gap-1">
-                {m.slice(0, 6)}...{m.slice(-4)}
-                <button type="button" onClick={() => removeMember(m)} className="text-error hover:text-error-focus">
+              <span key={m.address} className="badge badge-outline badge-lg gap-1">
+                {m.displayName || `${m.address.slice(0, 6)}...${m.address.slice(-4)}`}
+                <button
+                  type="button"
+                  onClick={() => removeMember(m.address)}
+                  className="text-error hover:text-error-focus"
+                >
                   ✕
                 </button>
               </span>

@@ -1,32 +1,74 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import type { NextPage } from "next";
-import { formatEther } from "viem";
 import { useAccount } from "wagmi";
 import { CreateGroupModal } from "~~/components/splitchain";
-import { useScaffoldReadContract } from "~~/hooks/scaffold-eth";
+
+interface User {
+  address: string;
+  displayName: string;
+  avatarUrl?: string | null;
+}
+
+interface GroupMember {
+  userAddress: string;
+  user: User;
+}
+
+interface Group {
+  id: number;
+  name: string;
+  createdAt: string;
+  creator: User;
+  members: GroupMember[];
+  _count: {
+    expenses: number;
+  };
+}
 
 const GroupsPage: NextPage = () => {
   const { address, isConnected } = useAccount();
+  const router = useRouter();
+  const [groups, setGroups] = useState<Group[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
 
-  // Get user's groups
-  const { data: userGroupIds, refetch: refetchGroups } = useScaffoldReadContract({
-    contractName: "SplitChain",
-    functionName: "getUserGroups",
-    args: [address],
-  });
+  // Fetch user's groups
+  useEffect(() => {
+    if (!address) {
+      setIsLoading(false);
+      return;
+    }
+
+    const fetchGroups = async () => {
+      try {
+        const res = await fetch(`/api/groups?user=${address}`);
+        if (res.ok) {
+          const data = await res.json();
+          setGroups(data);
+        }
+      } catch (error) {
+        console.error("Failed to fetch groups:", error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchGroups();
+  }, [address]);
+
+  const handleGroupCreated = (groupId: number) => {
+    router.push(`/groups/${groupId}`);
+  };
 
   if (!isConnected) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
-        <span className="text-6xl">🔗</span>
-        <h1 className="text-2xl font-bold">Connect Your Wallet</h1>
-        <p className="text-center opacity-70 max-w-md">
-          Connect your wallet to view your expense groups and start splitting costs with friends.
-        </p>
+      <div className="container mx-auto px-4 py-16 text-center">
+        <h1 className="text-4xl font-bold mb-4">👋 Welcome to SplitChain</h1>
+        <p className="text-xl opacity-70 mb-8">Connect your wallet to view and manage your expense groups</p>
       </div>
     );
   }
@@ -36,112 +78,67 @@ const GroupsPage: NextPage = () => {
       {/* Header */}
       <div className="flex justify-between items-center mb-8">
         <div>
-          <h1 className="text-3xl font-bold">Your Groups</h1>
-          <p className="opacity-70">Manage your expense splitting groups</p>
+          <h1 className="text-3xl font-bold flex items-center gap-3">
+            <span className="text-4xl">👥</span>
+            Your Groups
+          </h1>
+          <p className="opacity-70 mt-2">Manage your expense splitting groups</p>
         </div>
         <button onClick={() => setIsModalOpen(true)} className="btn btn-primary gap-2">
-          <span className="text-lg">+</span>
-          Create Group
+          <span>➕</span> New Group
         </button>
       </div>
 
-      {/* Groups Grid */}
-      {!userGroupIds || userGroupIds.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-16 gap-4 bg-base-200 rounded-2xl">
-          <span className="text-6xl">📭</span>
-          <h2 className="text-xl font-semibold">No Groups Yet</h2>
-          <p className="text-center opacity-70 max-w-md">
-            Create your first group to start splitting expenses with friends, roommates, or travel buddies.
-          </p>
-          <button onClick={() => setIsModalOpen(true)} className="btn btn-primary mt-4">
+      {/* Loading state */}
+      {isLoading ? (
+        <div className="flex justify-center py-12">
+          <span className="loading loading-spinner loading-lg"></span>
+        </div>
+      ) : groups.length === 0 ? (
+        /* Empty state */
+        <div className="text-center py-16 bg-base-200 rounded-2xl">
+          <span className="text-6xl mb-4 block">📝</span>
+          <h2 className="text-2xl font-bold mb-2">No groups yet</h2>
+          <p className="opacity-70 mb-6">Create your first group and start splitting expenses with friends!</p>
+          <button onClick={() => setIsModalOpen(true)} className="btn btn-primary">
             Create Your First Group
           </button>
         </div>
       ) : (
+        /* Groups grid */
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {userGroupIds.map((groupId: bigint) => (
-            <GroupCard key={groupId.toString()} groupId={groupId} userAddress={address} />
+          {groups.map(group => (
+            <Link key={group.id} href={`/groups/${group.id}`}>
+              <div className="card bg-base-200 hover:bg-base-300 transition-colors cursor-pointer shadow-lg hover:shadow-xl">
+                <div className="card-body">
+                  <h2 className="card-title">
+                    <span className="text-2xl">👥</span>
+                    {group.name}
+                  </h2>
+                  <p className="text-sm opacity-70">
+                    {group.members.length} members · {group._count.expenses} expenses
+                  </p>
+                  <div className="flex flex-wrap gap-1 mt-2">
+                    {group.members.slice(0, 3).map(m => (
+                      <span key={m.userAddress} className="badge badge-sm badge-outline">
+                        {m.user.displayName || m.userAddress.slice(0, 8)}
+                      </span>
+                    ))}
+                    {group.members.length > 3 && (
+                      <span className="badge badge-sm badge-ghost">+{group.members.length - 3}</span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </Link>
           ))}
         </div>
       )}
 
       {/* Create Group Modal */}
-      <CreateGroupModal
-        isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
-        onSuccess={() => {
-          refetchGroups();
-          setIsModalOpen(false);
-        }}
-      />
+      <CreateGroupModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} onSuccess={handleGroupCreated} />
     </div>
   );
 };
-
-// Group Card Component
-function GroupCard({ groupId, userAddress }: { groupId: bigint; userAddress?: string }) {
-  const { data: groupData } = useScaffoldReadContract({
-    contractName: "SplitChain",
-    functionName: "getGroup",
-    args: [groupId],
-  });
-
-  const { data: balance } = useScaffoldReadContract({
-    contractName: "SplitChain",
-    functionName: "getMemberBalance",
-    args: [groupId, userAddress],
-  });
-
-  if (!groupData) {
-    return (
-      <div className="card bg-base-200 animate-pulse">
-        <div className="card-body">
-          <div className="h-6 bg-base-300 rounded w-3/4"></div>
-          <div className="h-4 bg-base-300 rounded w-1/2 mt-2"></div>
-        </div>
-      </div>
-    );
-  }
-
-  const [name, , , memberCount] = groupData;
-  const balanceNum = balance ? Number(balance) : 0;
-  const isPositive = balanceNum > 0;
-  const isNegative = balanceNum < 0;
-
-  return (
-    <Link href={`/groups/${groupId}`}>
-      <div className="card bg-base-200 hover:bg-base-300 transition-colors cursor-pointer shadow-lg hover:shadow-xl">
-        <div className="card-body">
-          <h2 className="card-title">
-            <span className="text-2xl">👥</span>
-            {name}
-          </h2>
-
-          <div className="flex items-center gap-2 text-sm opacity-70">
-            <span>👤 {memberCount.toString()} members</span>
-          </div>
-
-          {/* Balance */}
-          <div className="mt-4">
-            <p className="text-xs opacity-50">Your balance</p>
-            <p
-              className={`text-xl font-bold ${
-                isPositive ? "text-success" : isNegative ? "text-error" : "text-base-content"
-              }`}
-            >
-              {isPositive && "+"}
-              {balance ? formatEther(balance < 0n ? -balance : balance) : "0"} ETH
-              {isNegative && " (you owe)"}
-            </p>
-          </div>
-
-          <div className="card-actions justify-end mt-2">
-            <span className="btn btn-ghost btn-sm">View →</span>
-          </div>
-        </div>
-      </div>
-    </Link>
-  );
-}
 
 export default GroupsPage;

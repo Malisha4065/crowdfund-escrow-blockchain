@@ -1,0 +1,95 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+// User profile (wallet-based identity)
+model User {
+  address     String   @id // Lowercase wallet address
+  displayName String
+  avatarUrl   String?
+  createdAt   DateTime @default(now())
+
+  // Relations
+  createdGroups    Group[]              @relation("GroupCreator")
+  groupMemberships GroupMember[]
+  paidExpenses     Expense[]            @relation("ExpensePayer")
+  expenseShares    ExpenseParticipant[]
+  settlementsFrom  Settlement[]         @relation("SettlementFrom")
+  settlementsTo    Settlement[]         @relation("SettlementTo")
+}
+
+// Expense splitting group
+model Group {
+  id        Int      @id @default(autoincrement())
+  name      String
+  createdAt DateTime @default(now())
+
+  // Relations
+  creatorAddress String
+  creator        User          @relation("GroupCreator", fields: [creatorAddress], references: [address])
+  members        GroupMember[]
+  expenses       Expense[]
+  settlements    Settlement[]
+}
+
+// Many-to-many: Users in Groups
+model GroupMember {
+  groupId     Int
+  userAddress String
+  joinedAt    DateTime @default(now())
+
+  group Group @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userAddress], references: [address])
+
+  @@id([groupId, userAddress])
+}
+
+// Expense record (off-chain)
+model Expense {
+  id           Int      @id @default(autoincrement())
+  groupId      Int
+  payerAddress String
+  amount       String // Store as string to preserve BigInt precision
+  description  String
+  createdAt    DateTime @default(now())
+
+  // Relations
+  group        Group                @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  payer        User                 @relation("ExpensePayer", fields: [payerAddress], references: [address])
+  participants ExpenseParticipant[]
+}
+
+// Many-to-many: Users participating in Expense
+model ExpenseParticipant {
+  expenseId   Int
+  userAddress String
+  share       String // Each person's share amount
+
+  expense Expense @relation(fields: [expenseId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userAddress], references: [address])
+
+  @@id([expenseId, userAddress])
+}
+
+// Settlement record (references blockchain tx)
+model Settlement {
+  id          Int      @id @default(autoincrement())
+  groupId     Int
+  fromAddress String
+  toAddress   String
+  amount      String
+  txHash      String? // Blockchain transaction hash
+  settledAt   DateTime @default(now())
+
+  // Relations
+  group Group @relation(fields: [groupId], references: [id])
+  from  User  @relation("SettlementFrom", fields: [fromAddress], references: [address])
+  to    User  @relation("SettlementTo", fields: [toAddress], references: [address])
+}

@@ -1,38 +1,59 @@
 "use client";
 
 import { useState } from "react";
-import { MemberBadge } from "./MemberBadge";
 import { formatEther } from "viem";
 import { useAccount } from "wagmi";
 import { useScaffoldWriteContract } from "~~/hooks/scaffold-eth";
 
+interface User {
+  address: string;
+  displayName: string;
+  avatarUrl?: string | null;
+}
+
 interface BalanceCardProps {
-  groupId: bigint;
+  groupId: number;
   creditor: string;
-  amount: bigint;
-  currentUserAddress?: string;
+  creditorUser?: User;
+  amount: string; // Wei as string
   onSettled?: () => void;
 }
 
-export function BalanceCard({ groupId, creditor, amount, onSettled }: BalanceCardProps) {
+export function BalanceCard({ groupId, creditor, creditorUser, amount, onSettled }: BalanceCardProps) {
   const { address } = useAccount();
   const [isSettling, setIsSettling] = useState(false);
 
   const { writeContractAsync } = useScaffoldWriteContract({ contractName: "SplitChain" });
 
   const isCreditor = creditor.toLowerCase() === address?.toLowerCase();
-  const amountEth = formatEther(amount);
+  const amountBigInt = BigInt(amount);
+  const amountEth = formatEther(amountBigInt);
 
   const handleSettle = async () => {
     if (!address || isCreditor) return;
 
     setIsSettling(true);
     try {
-      await writeContractAsync({
-        functionName: "settleDebt",
-        args: [groupId, creditor],
-        value: amount,
+      // Call blockchain contract
+      const tx = await writeContractAsync({
+        functionName: "settle",
+        args: [creditor, BigInt(groupId)],
+        value: amountBigInt,
       });
+
+      // Record settlement in database
+      await fetch("/api/settlements", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          groupId,
+          fromAddress: address,
+          toAddress: creditor,
+          amount: amount,
+          txHash: tx,
+        }),
+      });
+
       onSettled?.();
     } catch (error) {
       console.error("Settlement failed:", error);
@@ -40,6 +61,8 @@ export function BalanceCard({ groupId, creditor, amount, onSettled }: BalanceCar
       setIsSettling(false);
     }
   };
+
+  const displayName = creditorUser?.displayName || `${creditor.slice(0, 6)}...${creditor.slice(-4)}`;
 
   return (
     <div
@@ -60,8 +83,7 @@ export function BalanceCard({ groupId, creditor, amount, onSettled }: BalanceCar
               <>
                 <span className="text-2xl">💸</span>
                 <div>
-                  <p className="text-sm opacity-70">You owe</p>
-                  <MemberBadge address={creditor} size="sm" />
+                  <p className="text-sm opacity-70">You owe {displayName}</p>
                   <p className="text-xl font-bold text-error">-{amountEth} ETH</p>
                 </div>
               </>

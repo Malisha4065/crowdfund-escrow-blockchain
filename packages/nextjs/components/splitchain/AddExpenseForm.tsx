@@ -3,11 +3,16 @@
 import { useState } from "react";
 import { parseEther } from "viem";
 import { useAccount } from "wagmi";
-import { useScaffoldWriteContract } from "~~/hooks/scaffold-eth";
+
+interface User {
+  address: string;
+  displayName: string;
+  avatarUrl?: string | null;
+}
 
 interface AddExpenseFormProps {
-  groupId: bigint;
-  members: string[];
+  groupId: number;
+  members: Array<{ user: User }>;
   onSuccess?: () => void;
 }
 
@@ -19,18 +24,16 @@ export function AddExpenseForm({ groupId, members, onSuccess }: AddExpenseFormPr
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [selectAll, setSelectAll] = useState(true);
 
-  const { writeContractAsync } = useScaffoldWriteContract({ contractName: "SplitChain" });
-
   // Initialize with all members selected
   useState(() => {
-    setSelectedParticipants(members);
+    setSelectedParticipants(members.map(m => m.user.address));
   });
 
   const handleSelectAll = () => {
     if (selectAll) {
       setSelectedParticipants([]);
     } else {
-      setSelectedParticipants(members);
+      setSelectedParticipants(members.map(m => m.user.address));
     }
     setSelectAll(!selectAll);
   };
@@ -50,15 +53,28 @@ export function AddExpenseForm({ groupId, members, onSuccess }: AddExpenseFormPr
     setIsSubmitting(true);
     try {
       const amountWei = parseEther(amount);
-      await writeContractAsync({
-        functionName: "addExpense",
-        args: [groupId, amountWei, description, selectedParticipants],
+
+      // Call API to create expense
+      const res = await fetch("/api/expenses", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          groupId,
+          payerAddress: address,
+          amount: amountWei.toString(),
+          description,
+          participantAddresses: selectedParticipants,
+        }),
       });
+
+      if (!res.ok) {
+        throw new Error("Failed to add expense");
+      }
 
       // Reset form
       setDescription("");
       setAmount("");
-      setSelectedParticipants(members);
+      setSelectedParticipants(members.map(m => m.user.address));
       setSelectAll(true);
       onSuccess?.();
     } catch (error) {
@@ -130,21 +146,21 @@ export function AddExpenseForm({ groupId, members, onSuccess }: AddExpenseFormPr
             </button>
           </label>
           <div className="flex flex-wrap gap-2">
-            {members.map(member => (
+            {members.map(({ user }) => (
               <label
-                key={member}
+                key={user.address}
                 className={`cursor-pointer badge badge-lg ${
-                  selectedParticipants.includes(member) ? "badge-primary" : "badge-outline"
+                  selectedParticipants.includes(user.address) ? "badge-primary" : "badge-outline"
                 }`}
               >
                 <input
                   type="checkbox"
                   className="hidden"
-                  checked={selectedParticipants.includes(member)}
-                  onChange={() => toggleParticipant(member)}
+                  checked={selectedParticipants.includes(user.address)}
+                  onChange={() => toggleParticipant(user.address)}
                 />
-                {member.slice(0, 6)}...{member.slice(-4)}
-                {member.toLowerCase() === address?.toLowerCase() && " (you)"}
+                {user.displayName}
+                {user.address.toLowerCase() === address?.toLowerCase() && " (you)"}
               </label>
             ))}
           </div>
