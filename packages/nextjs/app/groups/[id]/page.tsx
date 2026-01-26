@@ -249,7 +249,7 @@ const GroupDetailPage: NextPage = () => {
                     payer: expense.payer.address,
                     amount: BigInt(expense.amount),
                     description: expense.description,
-                    timestamp: BigInt(new Date(expense.createdAt).getTime() / 1000),
+                    timestamp: BigInt(Math.floor(new Date(expense.createdAt).getTime() / 1000)),
                     participants: expense.participants.map(p => p.userAddress),
                   }}
                   currentUserAddress={address}
