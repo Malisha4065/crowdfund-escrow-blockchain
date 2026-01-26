@@ -282,14 +282,10 @@ const GroupDetailPage: NextPage = () => {
               {group.expenses.map(expense => (
                 <ExpenseCard
                   key={expense.id}
-                  expense={{
-                    payer: expense.payer.address,
-                    amount: BigInt(expense.amount),
-                    description: expense.description,
-                    timestamp: BigInt(Math.floor(new Date(expense.createdAt).getTime() / 1000)),
-                    participants: expense.participants.map(p => p.userAddress),
-                  }}
+                  expense={expense}
                   currentUserAddress={address}
+                  onDeleted={refreshData}
+                  onEdited={refreshData}
                 />
               ))}
             </div>
