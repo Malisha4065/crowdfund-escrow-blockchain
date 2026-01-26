@@ -184,10 +184,10 @@ const GroupDetailPage: NextPage = () => {
               {isCreator && (
                 <button
                   onClick={() => setShowDeleteConfirm(true)}
-                  className="btn btn-ghost btn-sm text-error opacity-60 hover:opacity-100"
+                  className="btn btn-ghost btn-sm text-error opacity-60 hover:opacity-100 gap-1"
                   title="Delete Group"
                 >
-                  🗑️
+                  🗑️ Delete Group
                 </button>
               )}
             </h1>

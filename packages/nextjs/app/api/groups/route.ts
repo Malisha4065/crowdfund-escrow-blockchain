@@ -21,7 +21,7 @@ export async function GET(request: NextRequest) {
       },
       include: {
         creator: {
-          select: { displayName: true, avatarUrl: true },
+          select: { address: true, displayName: true, avatarUrl: true },
         },
         members: {
           include: {
