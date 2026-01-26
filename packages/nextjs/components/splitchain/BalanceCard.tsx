@@ -15,11 +15,12 @@ interface BalanceCardProps {
   groupId: number;
   creditor: string;
   creditorUser?: User;
+  debtorUser?: User; // For showing who owes you
   amount: string; // Wei as string
   onSettled?: () => void;
 }
 
-export function BalanceCard({ groupId, creditor, creditorUser, amount, onSettled }: BalanceCardProps) {
+export function BalanceCard({ groupId, creditor, creditorUser, debtorUser, amount, onSettled }: BalanceCardProps) {
   const { address } = useAccount();
   const [isSettling, setIsSettling] = useState(false);
 
@@ -28,7 +29,11 @@ export function BalanceCard({ groupId, creditor, creditorUser, amount, onSettled
 
   const isCreditor = creditor.toLowerCase() === address?.toLowerCase();
   const amountBigInt = BigInt(amount);
-  const amountEth = formatEther(amountBigInt);
+  const amountEthRaw = formatEther(amountBigInt);
+  // Round to 6 decimal places for cleaner display
+  const amountEth = parseFloat(amountEthRaw)
+    .toFixed(6)
+    .replace(/\.?0+$/, "");
 
   const handleSettle = async () => {
     if (!address || isCreditor || !publicClient) return;
@@ -82,7 +87,11 @@ export function BalanceCard({ groupId, creditor, creditorUser, amount, onSettled
     }
   };
 
-  const displayName = creditorUser?.displayName || `${creditor.slice(0, 6)}...${creditor.slice(-4)}`;
+  // Display name for creditor (who you owe) or debtor (who owes you)
+  const creditorDisplayName = creditorUser?.displayName || `${creditor.slice(0, 6)}...${creditor.slice(-4)}`;
+  const debtorDisplayName =
+    debtorUser?.displayName ||
+    (debtorUser ? `${debtorUser.address.slice(0, 6)}...${debtorUser.address.slice(-4)}` : "Someone");
 
   return (
     <div
@@ -95,7 +104,7 @@ export function BalanceCard({ groupId, creditor, creditorUser, amount, onSettled
               <>
                 <span className="text-2xl">💰</span>
                 <div>
-                  <p className="text-sm opacity-70">You are owed</p>
+                  <p className="text-sm opacity-70">{debtorDisplayName} owes you</p>
                   <p className="text-xl font-bold text-success">+{amountEth} ETH</p>
                 </div>
               </>
@@ -103,7 +112,7 @@ export function BalanceCard({ groupId, creditor, creditorUser, amount, onSettled
               <>
                 <span className="text-2xl">💸</span>
                 <div>
-                  <p className="text-sm opacity-70">You owe {displayName}</p>
+                  <p className="text-sm opacity-70">You owe {creditorDisplayName}</p>
                   <p className="text-xl font-bold text-error">-{amountEth} ETH</p>
                 </div>
               </>

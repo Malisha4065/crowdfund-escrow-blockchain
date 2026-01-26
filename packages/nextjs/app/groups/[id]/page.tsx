@@ -294,8 +294,9 @@ const GroupDetailPage: NextPage = () => {
                   <BalanceCard
                     key={idx}
                     groupId={group.id}
-                    creditor={debt.from}
-                    creditorUser={getUser(debt.from)}
+                    creditor={address!}
+                    creditorUser={getUser(address!)}
+                    debtorUser={getUser(debt.from)}
                     amount={debt.amount}
                   />
                 ))}
